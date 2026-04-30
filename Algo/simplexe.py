@@ -1,10 +1,28 @@
 from fractions import Fraction
 
+variables = 2
+contraintes = 3
+
 def getVariableX(n):
     return "x" + str(n+1)
 
 def getVariableY(n):
     return "y" + str(n)
+
+def getVariable(n):
+    indice = 0
+    if n > (variables + contraintes - 1):
+        print("L'indice ne correspond pas à une variable")
+        return None
+    for i in range(variables):
+        if indice == n:
+            return getVariableX(i)
+        indice += 1
+    for i in range(contraintes):
+        if indice == n:
+            return getVariableY(i)
+        indice += 1
+    return None
 
 def is_integer(x):
     return isinstance(x, int) or (isinstance(x, float) and x.is_integer())
@@ -19,11 +37,19 @@ def entranteEtsortante(tab: list[list[int]]):
     for i in range(1, len(tab)):
         rapports.append(tab[i][len(tab[i])-1]/tab[i][index_entrante])
     rapports_positifs = [r for r in rapports if r > 0]
+    if not rapports_positifs:
+        print("Le problème est non bornée.")
+        return None
     sortante = min(rapports_positifs)
     index_sortante = rapports.index(sortante) + 1
+
+    print("On prend la plus grande valeur comme valeur entrante à savoir",getVariable(index_entrante),":",entrante)
+    print("On prend le plus petit rapport comme valeur sortante à savoir",getVariable(index_sortante),":",tab[index_sortante][len(tab[index_sortante])-1],"/",tab[index_sortante][index_entrante])
+    print()
+
     if tab[index_sortante][index_entrante]!=0:
         pivot = Fraction(1) / Fraction(tab[index_sortante][index_entrante])
-    for i in    range(len(tab[index_sortante])):
+    for i in range(len(tab[index_sortante])):
         tab[index_sortante][i] = tab[index_sortante][i] * pivot
     facteur = 0
 
@@ -36,7 +62,7 @@ def entranteEtsortante(tab: list[list[int]]):
         facteur = 0
 
     tab_affichage = "[" + ", ".join("[" + ", ".join(str(val) for val in ligne) + "]" for ligne in tab) + "]"
-    print(tab_affichage, "entrante : ", getVariableX(index_entrante), " ; sortante : ", getVariableY(index_sortante))
+    print(tab_affichage)
     return tab
 
 #Vérifie si une ligne du tableau à toutes ces valeurs positives
@@ -86,7 +112,7 @@ def complete_y(tab, n):
     return tab
 
 def main():
-    f = [10,20,0]
+    f = [10,20]
     y1 = [2,1,30]
     y2 = [1,4,64]
     y3 = [5,6,110]
