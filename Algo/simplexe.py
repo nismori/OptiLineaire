@@ -1,7 +1,16 @@
 from fractions import Fraction
 
 variables = 2
-contraintes = 3
+contraintes = 4
+tab_variables = []
+for i in range(variables):
+    tab_variables.append(f"x{i+1}")
+for i in range(contraintes):
+    tab_variables.append(f"y{i+1}")
+
+tab_contraintes= ["f"]
+for i in range(contraintes):
+    tab_contraintes.append(f"y{i+1}")
 
 def getVariableX(n):
     return "x" + str(n+1)
@@ -43,9 +52,10 @@ def entranteEtsortante(tab: list[list[int]]):
     sortante = min(rapports_positifs)
     index_sortante = rapports.index(sortante) + 1
 
-    print("On prend la plus grande valeur comme valeur entrante à savoir",getVariable(index_entrante),":",entrante)
-    print("On prend le plus petit rapport comme valeur sortante à savoir",getVariable(index_sortante),":",tab[index_sortante][len(tab[index_sortante])-1],"/",tab[index_sortante][index_entrante])
-    print()
+    print("On prend la plus grande valeur comme valeur entrante à savoir",tab_variables[index_entrante],":",entrante)
+    print(f"On prend le plus petit rapport comme valeur sortante à savoir {tab_contraintes[index_sortante]} : {tab[index_sortante][len(tab[index_sortante])-1]}/({tab[index_sortante][index_entrante]})")
+    print(f"Le pivot est {tab[index_sortante][index_entrante]}")
+    tab_contraintes[index_sortante] = getVariable(index_entrante)
 
     if tab[index_sortante][index_entrante]!=0:
         pivot = Fraction(1) / Fraction(tab[index_sortante][index_entrante])
@@ -60,6 +70,7 @@ def entranteEtsortante(tab: list[list[int]]):
                     facteur = tab[i][index_entrante]
                 tab[i][j] -= facteur * tab[index_sortante][j]
         facteur = 0
+    print()
 
     tab_affichage = "[" + ", ".join("[" + ", ".join(str(val) for val in ligne) + "]" for ligne in tab) + "]"
     print(tab_affichage)
@@ -81,35 +92,25 @@ def simplexe(tab: list[list[int]]):
 
 #Récupère les coordonnées de l'optimum
 def getOptimum(tab):
-    x1 = 0
-    x2 = 0
-    for i in range(len(tab)):
-        for j in range(len(tab[i])):
-            if tab[i][1] == 1.0:
-                x2 = tab[i][len(tab[i])-1]
-            if tab[i][0] == 1.0:
-                x1 = tab[i][len(tab[i])-1]
-    print("Optimum: (", x1,",",x2,")")
+    optimum = [0] * variables
+    for v in range(variables):
+        for i in range(len(tab)):
+            if tab[i][v] == 1.0:
+                optimum[v] = tab[i][-1]
+
+    str_opt = ", ".join(str(val) for val in optimum)
+    print("Optimum: (" + str_opt + ")")
 
 # Ajoute les 0 pour la ligne d'objectif
 def complete_f(tab):
-    if len(tab) == 2:
-        for i in range(4):
-            tab.append(0)
-    else :
-        print("Le tableau est incorrect")
+    for i in range(contraintes + 1):
+        tab.append(0)
     return tab
-
 
 # Ajoute les 0 pour le tableau
 def complete_y(tab, n):
-    n-=1
-    if len(tab) == 3:
-        identity_part = [1 if i == n else 0 for i in range(3)]
-        return tab[:2] + identity_part + [tab[2]]
-    else:
-        print("Le tableau est incorrect")
-    return tab
+    identity_part = [1 if i == (n-1) else 0 for i in range(contraintes)]
+    return tab[:variables] + identity_part + [tab[-1]]
 
 def main():
     f = [10,20]
