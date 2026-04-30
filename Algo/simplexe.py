@@ -1,16 +1,9 @@
 from fractions import Fraction
 
-variables = 2
-contraintes = 4
+variables = 0
+contraintes = 0
 tab_variables = []
-for i in range(variables):
-    tab_variables.append(f"x{i+1}")
-for i in range(contraintes):
-    tab_variables.append(f"y{i+1}")
-
-tab_contraintes= ["f"]
-for i in range(contraintes):
-    tab_contraintes.append(f"y{i+1}")
+tab_contraintes = []
 
 def getVariableX(n):
     return "x" + str(n+1)
@@ -61,15 +54,12 @@ def entranteEtsortante(tab: list[list[int]]):
         pivot = Fraction(1) / Fraction(tab[index_sortante][index_entrante])
     for i in range(len(tab[index_sortante])):
         tab[index_sortante][i] = tab[index_sortante][i] * pivot
-    facteur = 0
 
     for i in range(len(tab)):
-        for j in range(len(tab[i])):
-            if tab[i] != tab[index_sortante]:
-                if facteur == 0:
-                    facteur = tab[i][index_entrante]
+        if i != index_sortante:
+            facteur = tab[i][index_entrante]
+            for j in range(len(tab[i])):
                 tab[i][j] -= facteur * tab[index_sortante][j]
-        facteur = 0
     print()
 
     tab_affichage = "[" + ", ".join("[" + ", ".join(str(val) for val in ligne) + "]" for ligne in tab) + "]"
@@ -99,36 +89,37 @@ def getOptimum(tab):
                 optimum[v] = tab[i][-1]
 
     str_opt = ", ".join(str(val) for val in optimum)
-    print("Optimum: (" + str_opt + ")")
+    print("Optimum: (" + str_opt + ")", " ; Z =",tab[0][len(tab[0])-1]*-1)
 
-# Ajoute les 0 pour la ligne d'objectif
-def complete_f(tab):
+def run_simplexe(n_vars, n_constraints, c, A, b):
+    global variables, contraintes, tab_variables, tab_contraintes
+    variables = n_vars
+    contraintes = n_constraints
+
+    tab_variables = []
+    for i in range(variables):
+        tab_variables.append(f"x{i+1}")
+    for i in range(contraintes):
+        tab_variables.append(f"y{i+1}")
+
+    tab_contraintes = ["f"]
+    for i in range(contraintes):
+        tab_contraintes.append(f"y{i+1}")
+
+    f = list(c)
     for i in range(contraintes + 1):
-        tab.append(0)
-    return tab
+        f.append(Fraction(0))
 
-# Ajoute les 0 pour le tableau
-def complete_y(tab, n):
-    identity_part = [1 if i == (n-1) else 0 for i in range(contraintes)]
-    return tab[:variables] + identity_part + [tab[-1]]
+    tab = [f]
+    for i in range(contraintes):
+        row = list(A[i])
+        identity_part = [Fraction(1) if k == i else Fraction(0) for k in range(contraintes)]
+        row = row + identity_part + [b[i]]
+        tab.append(row)
 
-def main():
-    f = [10,20]
-    y1 = [2,1,30]
-    y2 = [1,4,64]
-    y3 = [5,6,110]
-    y4 = [3,7,14]
-
-    #ATTENTION : Ces fonctions ne marchent qu'avec un simple avec 3 inégalités.
-    f = complete_f(f)
-    y1 = complete_y(y1, 1)
-    y2 = complete_y(y2, 2)
-    y3 = complete_y(y3, 3)
-    y4 = complete_y(y4, 4)
-
-    tab = [f,y1,y2,y3,y4]
     tab = simplexe(tab)
-    getOptimum(tab)
+    if tab:
+        getOptimum(tab)
 
 if __name__ == "__main__":
-    main()
+    pass
