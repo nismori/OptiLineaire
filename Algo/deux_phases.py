@@ -1,247 +1,249 @@
-"""
-Methode des deux phases — saisie interactive
-TP Optimisation Lineaire  ING1-GIA  2025/2026
-"""
-
-
-# ─── Importation ──────────────────────────────────────────────────────────────
+import numpy as np
 from fractions import Fraction
 
 # ─── Affichage ────────────────────────────────────────────────────────────────
 
 def fmt(v):
-    return str(v)
-
+    if v.denominator == 1:
+        return str(v.numerator)
+    return f"{v.numerator}/{v.denominator}"
 
 def afficher_tableau(tab, base, cols):
-    header = f"{'':>6}" + "".join(f"{c:>12}" for c in cols) + f"{'RHS':>12}"
+    header = f"{'':>6}" + "".join(f"{c:>10}" for c in cols) + f"{'RHS':>10}"
     print(header)
     print("-" * len(header))
     for i, row in enumerate(tab):
-        label = "Z" if i == 0 else base[i - 1]
-        print(f"{label:>6}" + "".join(f"{fmt(v):>12}" for v in row[:-1]) + f"{fmt(row[-1]):>12}")
+        label = "f" if i == 0 else base[i - 1]
+        print(f"{label:>6}" + "".join(f"{fmt(v):>10}" for v in row[:-1]) + f"{fmt(row[-1]):>10}")
     print()
 
+# ─── Opérations du simplexe ───────────────────────────────────────────────────
 
-# ─── Operations du simplexe ───────────────────────────────────────────────────
-
-def pivoter(tab, l_pivot, c_pivot, cols):
+def pivoter(tab, l_pivot, c_pivot):
     pivot = tab[l_pivot][c_pivot]
-    print(f"  Pivot = {fmt(pivot)}  (colonne {cols[c_pivot]}, ligne {l_pivot})")
+    # Division de la ligne du pivot
     tab[l_pivot] = [v / pivot for v in tab[l_pivot]]
-    print(f"  L{l_pivot} <- L{l_pivot} / {fmt(pivot)}")
+    
+    # Élimination dans les autres lignes (y compris la ligne de la fonction objectif f)
     for i in range(len(tab)):
         if i != l_pivot:
-            f = tab[i][c_pivot]
-            if f != 0:
-                signe = "-" if f > 0 else "+"
-                print(f"  L{i} <- L{i} {signe} {fmt(abs(f))} * L{l_pivot}")
-                tab[i] = [tab[i][k] - f * tab[l_pivot][k] for k in range(len(tab[i]))]
-
+            facteur = tab[i][c_pivot]
+            if facteur != 0:
+                tab[i] = [tab[i][k] - facteur * tab[l_pivot][k] for k in range(len(tab[i]))]
 
 def choisir_entrante(z, n_cols):
-    val_min = min(z[j] for j in range(n_cols))
-    if val_min >= 0:
-        return None
-    return list(z).index(val_min)
+    # On cherche à MAXIMISER, donc on prend le plus grand coefficient strictement positif dans f
+    max_val = 0
+    col_e = None
+    for j in range(n_cols):
+        if z[j] > max_val:
+            max_val = z[j]
+            col_e = j
+    return col_e # Renvoie None si tous les coeff sont <= 0 (optimum atteint)
 
-
-def choisir_sortante(tab, col_e):
+def choisir_sortante(tab, col_e, base):
     ratios = []
     for i in range(1, len(tab)):
         if tab[i][col_e] > 0:
-            ratios.append((tab[i][-1] / tab[i][col_e], i))
+            ratios.append((tab[i][-1] / tab[i][col_e], i, base[i-1]))
+            
     if not ratios:
         return None
-    return min(ratios)[1]
+        
+    # Règle de choix : on prend le ratio minimum
+    min_ratio = min(r[0] for r in ratios)
+    candidats = [r for r in ratios if r[0] == min_ratio]
+    
+    # Règle de départage du cours : favoriser la sortie de δ si possible
+    for r in candidats:
+        if r[2] == 'δ':
+            return r[1]
+            
+    return candidats[0][1]
 
+# ─── Normalisation ────────────────────────────────────────────────────────────
 
-# ─── Construction du tableau Phase 1 ──────────────────────────────────────────
-
-def construire_phase1(A, b, types):
-    n = len(A[0])
-    n_slack = sum(1 for t in types if t != '=')
-    n_art   = sum(1 for t in types if t in ('>=', '='))
-
-    # Nommage sequentiel des variables d'ecart et artificielles
-    cols = (
-        [f"x{j+1}" for j in range(n)]
-        + [f"s{k+1}" for k in range(n_slack)]
-        + [f"a{k+1}" for k in range(n_art)]
-    )
-    idx_slack, idx_art = n, n + n_slack
-
-    base, art_cols, lignes = [], [], []
-    sc = ac = 0
-
+def normaliser_contraintes(A, b, types):
+    """
+    Convertit toutes les contraintes sous la forme standard Ax <= b pour 
+    faciliter l'évaluation de l'admissibilité de l'origine.
+    """
+    A_norm, b_norm = [], []
     for t, ai, bi in zip(types, A, b):
-        bi, ai = Fraction(bi), [Fraction(v) for v in ai]
-        if bi < 0:                          # normalise RHS >= 0
-            ai, bi = [-v for v in ai], -bi
-            t = {'<=': '>=', '>=': '<=', '=': '='}[t]
-
-        row = ai + [Fraction(0)] * (n_slack + n_art) + [bi]
-
+        ai_frac = [Fraction(v) for v in ai]
+        bi_frac = Fraction(bi)
+        
         if t == '<=':
-            row[idx_slack + sc] = Fraction(1)
-            base.append(f"s{sc+1}")
-            sc += 1
+            A_norm.append(ai_frac)
+            b_norm.append(bi_frac)
         elif t == '>=':
-            row[idx_slack + sc] = Fraction(-1)
-            row[idx_art   + ac] =  Fraction(1)
-            base.append(f"a{ac+1}")
-            art_cols.append(idx_art + ac)
-            sc += 1; ac += 1
+            A_norm.append([-v for v in ai_frac])
+            b_norm.append(-bi_frac)
         elif t == '=':
-            row[idx_art + ac] = Fraction(1)
-            base.append(f"a{ac+1}")
-            art_cols.append(idx_art + ac)
-            ac += 1
-        lignes.append(row)
+            A_norm.append(ai_frac)
+            b_norm.append(bi_frac)
+            A_norm.append([-v for v in ai_frac])
+            b_norm.append(-bi_frac)
+            
+    return A_norm, b_norm
 
-    # Ligne Z phase 1 : min W = sum(a_i)  <=>  max(-W),  z[a_i] = +1
-    z = [Fraction(0)] * (n + n_slack + n_art) + [Fraction(0)]
-    for ac_idx in art_cols:
-        z[ac_idx] = Fraction(1)
-    tableau = [z] + lignes
+# ─── Phase 1 (Unique δ) ───────────────────────────────────────────────────────
 
-    # Eliminer les artificielles deja en base de la ligne Z
-    for i, bv in enumerate(base):
-        if bv.startswith('a'):
-            k = int(bv[1:]) - 1
-            coef = tableau[0][art_cols[k]]
-            tableau[0] = [tableau[0][j] - coef * tableau[i+1][j]
-                          for j in range(len(tableau[0]))]
+def construire_phase1(A_norm, b_norm):
+    n = len(A_norm[0])
+    m = len(A_norm)
+    
+    cols = [f"x{j+1}" for j in range(n)] + ["δ"] + [f"y{i+1}" for i in range(m)]
+    
+    # Ligne objectif f = -δ (le coeff de δ est -1)
+    f_row = [Fraction(0)] * n + [Fraction(-1)] + [Fraction(0)] * m + [Fraction(0)]
+    tableau = [f_row]
+    base = []
+    
+    for i in range(m):
+        # Contrainte : A_i * x - δ + y_i = b_i
+        row = A_norm[i] + [Fraction(-1)] + [Fraction(1) if k == i else Fraction(0) for k in range(m)] + [b_norm[i]]
+        tableau.append(row)
+        base.append(f"y{i+1}")
+        
+    return tableau, base, cols
 
-    return tableau, base, cols, art_cols
-
-
-# ─── Phase 1 ──────────────────────────────────────────────────────────────────
-
-def phase1(A, b, types):
+def phase1(A_norm, b_norm):
     print("\n" + "="*55)
     print("  PHASE 1 — Trouver une solution de base admissible")
     print("="*55)
 
-    tableau, base, cols, art_cols = construire_phase1(A, b, types)
+    tableau, base, cols = construire_phase1(A_norm, b_norm)
     n_cols = len(cols)
+    
+    print("\nTableau initial Phase 1 (avant pivot forcé) :")
+    afficher_tableau(tableau, base, cols)
 
-    print("\nTableau initial Phase 1 :")
+    # 1. PIVOT FORCÉ pour rendre l'origine (avec δ) admissible
+    # On cherche la ligne avec le b_i le plus négatif
+    b_vals = [tableau[i][-1] for i in range(1, len(tableau))]
+    min_b = min(b_vals)
+    l_pivot = b_vals.index(min_b) + 1
+    c_pivot = cols.index("δ")
+    
+    print(f"  -> Pivot forcé sur δ pour rendre le tableau admissible : ligne {l_pivot}")
+    pivoter(tableau, l_pivot, c_pivot)
+    base[l_pivot-1] = "δ"
+    
+    print("\nTableau Phase 1 après pivot forcé :")
+    afficher_tableau(tableau, base, cols)
+
+    # 2. Algorithme du Simplexe standard
+    it = 1
+    while True:
+        col_e = choisir_entrante(tableau[0], n_cols)
+        if col_e is None:
+            print("  => Tous les coefficients de f <= 0 : Phase 1 terminée.\n")
+            break
+
+        col_s = choisir_sortante(tableau, col_e, base)
+        if col_s is None:
+            print("  => Phase 1 non bornée (cas anormal).")
+            return None, None, None
+
+        print(f"  Itération {it} | Entrante : {cols[col_e]} | Sortante : {base[col_s-1]}")
+        
+        base[col_s-1] = cols[col_e]
+        pivoter(tableau, col_s, col_e)
+        afficher_tableau(tableau, base, cols)
+        it += 1
+
+    # Le RHS de la ligne f contient l'opposé de la valeur de l'objectif (-f_val)
+    f_opt = -tableau[0][-1] 
+    if f_opt != 0:
+        print(f"  δ* = {-f_opt} != 0 => INFAISABLE : aucune solution admissible.\n")
+        return None, None, None
+
+    print(f"  δ* = 0 => Solution de base admissible trouvée !\n")
+    
+    # Traitement de la dégénérescence : si δ est toujours dans la base avec la valeur 0
+    if "δ" in base:
+        idx_row = base.index("δ") + 1
+        print("  Note: δ est resté dans la base (dégénérescence). On la sort.")
+        for j, c_name in enumerate(cols):
+            if c_name not in base and c_name != "δ" and tableau[idx_row][j] != 0:
+                pivoter(tableau, idx_row, j)
+                base[idx_row - 1] = c_name
+                break
+        else:
+            # S'il n'y a pas de pivot valide, la ligne est redondante
+            tableau.pop(idx_row)
+            base.pop(idx_row - 1)
+
+    return tableau, base, cols
+
+
+# ─── Phase 2 ──────────────────────────────────────────────────────────────────
+
+def construire_phase2_direct(A_norm, b_norm, c_orig):
+    n = len(A_norm[0])
+    m = len(A_norm)
+    cols = [f"x{j+1}" for j in range(n)] + [f"y{i+1}" for i in range(m)]
+    
+    tab = [[Fraction(c_orig[j]) if j < n else Fraction(0) for j in range(len(cols))] + [Fraction(0)]]
+    base = []
+    for i in range(m):
+        row = A_norm[i] + [Fraction(1) if k == i else Fraction(0) for k in range(m)] + [b_norm[i]]
+        tab.append(row)
+        base.append(f"y{i+1}")
+    return tab, base, cols
+
+def setup_phase2_depuis_phase1(tab_p1, base, cols, c_orig):
+    n = len(c_orig)
+    idx_delta = cols.index("δ")
+    
+    # Suppression de la colonne δ
+    cols.pop(idx_delta)
+    for row in tab_p1:
+        row.pop(idx_delta)
+        
+    # Restauration de l'objectif original dans la ligne f
+    tab_p1[0] = [Fraction(c_orig[j]) if j < n else Fraction(0) for j in range(len(cols))] + [Fraction(0)]
+    
+    # Élimination des variables de base de la ligne f
+    for i, bv in enumerate(base):
+        idx_bv = cols.index(bv)
+        coeff = tab_p1[0][idx_bv]
+        if coeff != 0:
+            for k in range(len(tab_p1[0])):
+                tab_p1[0][k] -= coeff * tab_p1[i+1][k]
+                
+    return tab_p1, cols
+
+def phase2(tableau, base, cols):
+    print("="*55)
+    print("  PHASE 2 — Optimiser le problème original")
+    print("="*55 + "\n")
+    
+    n_cols = len(cols)
+    print("Tableau initial Phase 2 :")
     afficher_tableau(tableau, base, cols)
 
     it = 1
     while True:
         col_e = choisir_entrante(tableau[0], n_cols)
         if col_e is None:
-            print("  => Aucun coefficient negatif en Z — Phase 1 terminee.\n")
+            print("  => Tous les coefficients de f <= 0 : solution OPTIMALE.\n")
             break
 
-        col_s = choisir_sortante(tableau, col_e)
+        col_s = choisir_sortante(tableau, col_e, base)
         if col_s is None:
-            print("  Phase 1 non bornee (cas anormal).")
-            return None, None, None, None
-
-        print(f"{'─'*45}")
-        print(f"  Iteration {it}")
-        print(f"  Variable entrante : {cols[col_e]}   (coeff Z = {fmt(tableau[0][col_e])})")
-        print(f"  Test du ratio :")
-        for i in range(1, len(tableau)):
-            aij = tableau[i][col_e]
-            if aij > 0:
-                ratio = tableau[i][-1] / aij
-                arrow = "  <-- min" if i == col_s else ""
-                print(f"    L{i} [{base[i-1]:>4}] : {fmt(tableau[i][-1])} / {fmt(aij)} = {fmt(ratio)}{arrow}")
-            else:
-                print(f"    L{i} [{base[i-1]:>4}] : aij = {fmt(aij)} <= 0, ignoree")
-        print(f"  Variable sortante : {base[col_s-1]}")
-        print(f"  Operations de pivot :")
-        base[col_s-1] = cols[col_e]
-        pivoter(tableau, col_s, col_e, cols)
-        print(f"\n  Tableau apres pivot :")
-        afficher_tableau(tableau, base, cols)
-        it += 1
-
-    # z_RHS = max(-W) = -W*  =>  W* = -z_RHS
-    W_star = -tableau[0][-1]
-    print(f"  W* = {fmt(W_star)}")
-    if W_star != 0:
-        print("  INFAISABLE : aucune solution admissible.\n")
-        return None, None, None, None
-
-    print(f"  W* = 0  =>  SBA trouvee — base = {base}\n")
-    return tableau, base, cols, art_cols
-
-
-# ─── Phase 2 ──────────────────────────────────────────────────────────────────
-
-def phase2(tableau_p1, base_p1, cols_p1, art_cols, c):
-    print("="*55)
-    print("  PHASE 2 — Optimiser le probleme original")
-    print("="*55)
-
-    # Supprimer les colonnes des variables artificielles
-    art_set = set(art_cols)
-    keep    = [j for j in range(len(cols_p1)) if j not in art_set]
-    cols    = [cols_p1[j] for j in keep]
-    n2      = len(cols)
-
-    lignes = [[tableau_p1[i][j] for j in keep] + [tableau_p1[i][-1]]
-              for i in range(1, len(tableau_p1))]
-
-    # z[j] = -c[j]  (convention : entrant = coeff le plus negatif)
-    z = [Fraction(0)] * n2 + [Fraction(0)]
-    for j, lbl in enumerate(cols):
-        if lbl.startswith('x'):
-            z[j] = -c[int(lbl[1:]) - 1]
-
-    tableau = [z] + lignes
-    base    = list(base_p1)
-
-    # Eliminer les variables de base de la ligne Z
-    for i, bv in enumerate(base):
-        if bv in cols:
-            bv_col = cols.index(bv)
-            coef = tableau[0][bv_col]
-            if coef != 0:
-                tableau[0] = [tableau[0][k] - coef * tableau[i+1][k]
-                              for k in range(len(tableau[0]))]
-
-    print(f"\nTableau initial Phase 2 :")
-    afficher_tableau(tableau, base, cols)
-
-    it = 1
-    while True:
-        col_e = choisir_entrante(tableau[0], n2)
-        if col_e is None:
-            print("  => Tous les coefficients de Z >= 0 : solution OPTIMALE.\n")
-            break
-
-        col_s = choisir_sortante(tableau, col_e)
-        if col_s is None:
-            print("  => Probleme NON BORNE.\n")
+            print("  => Problème NON BORNÉ.\n")
             return
 
-        print(f"{'─'*45}")
-        print(f"  Iteration {it}")
-        print(f"  Variable entrante : {cols[col_e]}   (coeff Z = {fmt(tableau[0][col_e])})")
-        print(f"  Test du ratio :")
-        for i in range(1, len(tableau)):
-            aij = tableau[i][col_e]
-            if aij > 0:
-                ratio = tableau[i][-1] / aij
-                arrow = "  <-- min" if i == col_s else ""
-                print(f"    L{i} [{base[i-1]:>4}] : {fmt(tableau[i][-1])} / {fmt(aij)} = {fmt(ratio)}{arrow}")
-            else:
-                print(f"    L{i} [{base[i-1]:>4}] : aij = {fmt(aij)} <= 0, ignoree")
-        print(f"  Variable sortante : {base[col_s-1]}")
-        print(f"  Operations de pivot :")
+        print(f"  Itération {it} | Entrante : {cols[col_e]} | Sortante : {base[col_s-1]}")
+        
         base[col_s-1] = cols[col_e]
-        pivoter(tableau, col_s, col_e, cols)
-        print(f"\n  Tableau apres pivot :")
+        pivoter(tableau, col_s, col_e)
         afficher_tableau(tableau, base, cols)
         it += 1
 
-    Z_star = tableau[0][-1]
+    Z_star = -tableau[0][-1]
     print(f"  Z* = {fmt(Z_star)}")
     print("  Solution optimale :")
     for i, bv in enumerate(base):
@@ -250,14 +252,6 @@ def phase2(tableau_p1, base_p1, cols_p1, art_cols, c):
     for lbl in cols:
         if lbl.startswith('x') and lbl not in base:
             print(f"    {lbl} = 0")
-    print()
-
-    # Verification des solutions multiples (pour les cas d'infinite de solutions)
-    for j, lbl in enumerate(cols):
-        if lbl.startswith('x') and lbl not in base:
-            if tableau[0][j] == 0:
-                print(f"  Note : Solution OPTIMALE MULTIPLE possible car la variable hors base {lbl} a un cout reduit de 0.")
-                break
 
 
 # ─── Saisie utilisateur ────────────────────────────────────────────────────────
@@ -267,32 +261,29 @@ def saisir_fraction(msg):
         try:
             return Fraction(input(msg))
         except ValueError:
-            print("  Valeur invalide. Entrez un entier, decimal, ou fraction (ex: 3/2).")
+            print("  Valeur invalide. Entrez un entier, décimal, ou fraction (ex: 3/2).")
 
 def saisir_int(msg, mini=1):
     while True:
         try:
             v = int(input(msg))
-            if v >= mini:
-                return v
+            if v >= mini: return v
             print(f"  Entrez un entier >= {mini}.")
         except ValueError:
-            print("  Valeur invalide, reessayez.")
+            print("  Valeur invalide.")
 
 def saisir_type(msg):
     while True:
         v = input(msg).strip()
-        if v in ('<=', '>=', '='):
-            return v
+        if v in ('<=', '>=', '='): return v
         print("  Tapez  <=   >=   ou   =")
-
 
 def main():
     print("\n" + "="*55)
-    print("   METHODE DES DEUX PHASES — Simplexe")
+    print("   MÉTHODE DES DEUX PHASES — Simplexe (Méthode CY Tech)")
     print("="*55 + "\n")
 
-    n = saisir_int("Nombre de variables de decision : ")
+    n = saisir_int("Nombre de variables de décision : ")
     m = saisir_int("Nombre de contraintes          : ")
 
     print(f"\nFonction objectif  max Z = c1*x1 + ... + c{n}*x{n}")
@@ -302,22 +293,39 @@ def main():
     print("\nContraintes :")
     for i in range(m):
         print(f"\n  Contrainte {i+1} :")
-        ai = [saisir_fraction(f"    a{i+1}{j+1} (coeff x{j+1}) : ") for j in range(n)]
-        A.append(ai)
+        A.append([saisir_fraction(f"    a{i+1}{j+1} (coeff x{j+1}) : ") for j in range(n)])
         types.append(saisir_type(f"    Type (<=  >=  =) : "))
         b.append(saisir_fraction(f"    b{i+1} (membre droit)  : "))
 
-    print("\n--- Recapitulatif ---")
-    print("max Z = " + " + ".join(f"{c[j]}*x{j+1}" for j in range(n)))
-    for i in range(m):
-        lhs = " + ".join(f"{A[i][j]}*x{j+1}" for j in range(n))
-        print(f"  {lhs}  {types[i]}  {b[i]}")
+    # Normalisation mathématique pour évaluer l'admissibilité proprement
+    A_norm, b_norm = normaliser_contraintes(A, b, types)
+
+    print("\n" + "="*55)
+    print("   VÉRIFICATION ADMISSIBILITÉ DE L'ORIGINE")
+    print("="*55)
+    print("  → Conversion en Ax <= b et vérification x=0 (soit 0 <= b_i)\n")
+
+    origine_admissible = True
+    for i, bi in enumerate(b_norm):
+        if bi < 0:
+            print(f"  Contrainte (normalisée) {i+1} : 0 <= {bi}  ✘ NON satisfaite")
+            origine_admissible = False
+        else:
+            print(f"  Contrainte (normalisée) {i+1} : 0 <= {bi}  ✔ satisfaite")
+
     print()
-
-    tab, base, cols, art_cols = phase1(A, b, types)
-    if tab is not None:
-        phase2(tab, base, cols, art_cols, c)
-
+    if origine_admissible:
+        print("  ✔ L'ORIGINE EST ADMISSIBLE")
+        print("    → Simplexe applicable directement (Phase 2 uniquement)\n")
+        tab, base, cols = construire_phase2_direct(A_norm, b_norm, c)
+        phase2(tab, base, cols)
+    else:
+        print("  ✘ L'ORIGINE N'EST PAS ADMISSIBLE")
+        print("    → Méthode des DEUX PHASES (avec variable δ unique) nécessaire\n")
+        tab_p1, base, cols = phase1(A_norm, b_norm)
+        if tab_p1 is not None:
+            tab_p2, cols_p2 = setup_phase2_depuis_phase1(tab_p1, base, cols, c)
+            phase2(tab_p2, base, cols_p2)
 
 if __name__ == "__main__":
     main()
