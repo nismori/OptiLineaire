@@ -54,11 +54,11 @@ def entranteEtsortante(tab: list[list[int]]):
 
     print("On prend la plus grande valeur comme valeur entrante à savoir",tab_variables[index_entrante],":",entrante)
     print(f"On prend le plus petit rapport comme valeur sortante à savoir {tab_contraintes[index_sortante]} : {tab[index_sortante][len(tab[index_sortante])-1]}/({tab[index_sortante][index_entrante]})")
+    print(f"Le pivot est {tab[index_sortante][index_entrante]}")
     tab_contraintes[index_sortante] = getVariable(index_entrante)
 
     if tab[index_sortante][index_entrante]!=0:
         pivot = Fraction(1) / Fraction(tab[index_sortante][index_entrante])
-        print(f"L{getVariable(index_sortante)} <- L{getVariable(index_sortante)} * {pivot}")
     for i in range(len(tab[index_sortante])):
         tab[index_sortante][i] = tab[index_sortante][i] * pivot
     facteur = 0
@@ -69,7 +69,6 @@ def entranteEtsortante(tab: list[list[int]]):
                 if facteur == 0:
                     facteur = tab[i][index_entrante]
                 tab[i][j] -= facteur * tab[index_sortante][j]
-        print(f"L{getVariable(i)} <- L{getVariable(i)} - {facteur}")
         facteur = 0
     print()
 
