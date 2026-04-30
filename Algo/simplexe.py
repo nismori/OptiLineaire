@@ -23,7 +23,7 @@ def entranteEtsortante(tab: list[list[int]]):
     index_sortante = rapports.index(sortante) + 1
     if tab[index_sortante][index_entrante]!=0:
         pivot = Fraction(1) / Fraction(tab[index_sortante][index_entrante])
-    for i in range(len(tab[index_sortante])):
+    for i in    range(len(tab[index_sortante])):
         tab[index_sortante][i] = tab[index_sortante][i] * pivot
     facteur = 0
 
